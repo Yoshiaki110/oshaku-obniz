@@ -1,0 +1,101 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+    />
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script
+      src="https://unpkg.com/obniz@3.x/obniz.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <div id="obniz-debug"></div>
+    <h3>遠隔お酌</h3>
+    <div id="print">obnizのスイッチを押すと開始します</div><br>
+    <img src="https://raw.githubusercontent.com/Yoshiaki110/oshaku-obniz/main/tokkuri.png?raw=true" id="tokkuri"/>
+    <script>
+     var MIN_Y = -0.84;
+     var MAX_Y = 1.17;
+     var obniz = null;
+     var servo = null;
+     var angle = 0.0;         // M5StickCの角度
+     var sAngle = 0.0;        // サーボの角度
+     var oshaku = false;
+
+     // M5StickC（コントローラ側）のobnizのID
+     var obnizM5 = new Obniz.M5StickC("OBNIZ_ID_HERE");
+     // お酌装置側のobnizのID
+     obniz = new Obniz("OBNIZ_ID_HERE");
+
+     obnizM5.onconnect = async function () {
+       obnizM5.display.clear();
+       obnizM5.display.print("enkakuoshaku start");
+       // M5stickCの加速度センサが MPU6886 の場合
+       // await obnizM5.setupIMUWait();
+       // M5stickCの加速度センサが SH200Q の場合
+       await obnizM5.setupIMUWait("SH200Q");
+
+       obnizM5.onloop = async function () {
+         if (oshaku) {
+           let accele = await obnizM5.accelerationWait();
+           console.log(accele.y);
+           // 1～-1を0～180に変換
+           angle = ((accele.y * -1 + MAX_Y) * 180) / (MAX_Y + MIN_Y * -1);
+           $("#print").text("角度：" + Math.round(angle));
+           obnizM5.display.clear();
+           obnizM5.display.print("angle:" + Math.round(angle));
+         }
+         await obnizM5.wait(200);
+       };
+     };
+
+     obniz.onconnect = async function () {
+       obniz.display.clear();
+       obniz.display.print("push switch");
+       // サーボの設定
+       servo = obniz.wired("ServoMotor", { gnd: 0, vcc: 1, signal: 2 });
+       // スイッチが押されたら
+       obniz.switch.onchange = function(state) {
+         if (state === "push") {
+           oshaku = !oshaku;          // 押すたびにモード変更
+           if (oshaku) {
+             $("#print").text("お酌開始");
+           } else {
+             $("#print").text("お酌停止中、スイッチを押すと開始します");
+             angle = 0;
+           }
+         }
+       }
+     };
+
+     // サーボをゆっくり動かすため、10ミリ秒毎に動かす
+     function move() {
+       if (servo) {
+         var diff = sAngle - angle;
+         if (Math.abs(diff) > 3) {
+           if (diff < 0) {
+             sAngle += 2;
+           } else {
+             sAngle -= 2;
+           }
+           obniz.display.clear();
+           obniz.display.print(
+             "angle:" + Math.round(angle) + "  " + Math.round(sAngle)
+           );
+           // サーボを回転
+           servo.angle(sAngle);
+           // 画像を回転
+           var arrow = document.getElementById("tokkuri");
+           arrow.style.transform = "rotate(" + sAngle + "deg)";
+         }
+       }
+       setTimeout(move, 100);
+     }
+     setTimeout(move, 1000);
+    </script>
+  </body>
+</html>
